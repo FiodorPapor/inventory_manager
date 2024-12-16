@@ -6,6 +6,9 @@ init(autoreset=True)
 
 # Conexión centralizada a la base de datos
 def conectar_base_datos():
+    """
+    Conecta a la base de datos SQLite. Si ocurre un error, lo maneja.
+    """
     try:
         return sqlite3.connect("inventario.db")
     except sqlite3.Error as e:
@@ -14,6 +17,9 @@ def conectar_base_datos():
 
 # Inicialización de la base de datos si no existe
 def inicializar_base_datos():
+    """
+    Crea la tabla 'productos' si no existe en la base de datos.
+    """
     conexion = conectar_base_datos()
     if conexion is None:
         return
@@ -33,19 +39,26 @@ def inicializar_base_datos():
     conexion.close()
     print(Fore.GREEN + "✅ Base de datos inicializada correctamente.")
 
+# Función para agregar un producto al inventario
 def agregar_producto():
-    # Solicita los datos del usuario para el nuevo producto
+    """
+    Solicita al usuario datos del producto y los guarda en la base de datos.
+    Permite al usuario elegir entre continuar con ID automático o usar el último ID eliminado.
+    """
+    print(Fore.CYAN + "\n📝 Agregar Producto")
     nombre = input("Ingrese el nombre del producto: ")
     descripcion = input("Ingrese la descripción del producto: ")
 
+    # Validación de cantidad
     while True:
         cantidad = input("Ingrese la cantidad del producto: ")
         if cantidad.isdigit() and int(cantidad) >= 0:
             cantidad = int(cantidad)
             break
         else:
-            print("Por favor, ingrese una cantidad válida (número entero no negativo).")
+            print(Fore.RED + "⚠️ Por favor, ingrese una cantidad válida (número entero no negativo).")
 
+    # Validación de precio
     while True:
         precio = input("Ingrese el precio del producto: ")
         try:
@@ -53,70 +66,83 @@ def agregar_producto():
             if precio >= 0:
                 break
             else:
-                print("El precio no puede ser negativo.")
+                print(Fore.RED + "⚠️ El precio no puede ser negativo.")
         except ValueError:
-            print("Por favor, ingrese un precio válido.")
+            print(Fore.RED + "⚠️ Por favor, ingrese un precio válido.")
 
     categoria = input("Ingrese la categoría del producto: ")
 
-    # Conecta a la base de datos
-    conexion = sqlite3.connect("inventario.db")
+    # Conexión a la base de datos
+    conexion = conectar_base_datos()
+    if conexion is None:
+        return
+
     cursor = conexion.cursor()
 
-    # Pregunta al usuario si desea usar el último ID eliminado o continuar
-    opcion = input("¿Desea continuar con el siguiente ID en la lista (ingrese '1') o desea usar el último ID eliminado (ingrese '2')? ")
+    # Pregunta si desea usar el último ID eliminado
+    opcion = input("¿Desea continuar con el siguiente ID en la lista (ingrese '1') o usar el último ID eliminado (ingrese '2')? ")
 
     if opcion == '2':
-        # Encuentra el siguiente ID disponible o usa el último ID eliminado
+        # Encuentra el ID reutilizable
         cursor.execute("SELECT MIN(id + 1) FROM productos WHERE (id + 1) NOT IN (SELECT id FROM productos)")
         resultado = cursor.fetchone()
         if resultado[0] is not None:
             siguiente_id = resultado[0]
         else:
-            # Si no hay IDs eliminados, obtiene el ID máximo o asigna 1 si la tabla está vacía
+            # Si no hay IDs disponibles, usa el próximo ID
             max_id = cursor.execute("SELECT MAX(id) FROM productos").fetchone()[0]
             siguiente_id = max_id + 1 if max_id is not None else 1
     else:
-        # Obtiene el próximo ID auto-incremental o asigna 1 si la tabla está vacía
+        # Continua con el próximo ID automático
         max_id = cursor.execute("SELECT MAX(id) FROM productos").fetchone()[0]
         siguiente_id = max_id + 1 if max_id is not None else 1
 
-    # Inserta el producto con el ID determinado
+    # Inserta el producto
     cursor.execute('''
         INSERT INTO productos (id, nombre, descripcion, cantidad, precio, categoria)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (siguiente_id, nombre, descripcion, cantidad, precio, categoria))
 
-    # Guarda los cambios y cierra la conexión
+    # Guarda cambios y cierra la conexión
     conexion.commit()
     conexion.close()
 
-    print(f"¡Producto agregado exitosamente con ID: {siguiente_id}!")
+    print(Fore.GREEN + f"✅ Producto agregado exitosamente con ID: {siguiente_id}")
 
+# Función para ver todos los productos
 def ver_productos():
-    # Conecta a la base de datos
-    conexion = sqlite3.connect("inventario.db")
-    cursor = conexion.cursor()
+    """
+    Muestra todos los productos en la base de datos.
+    """
+    print(Fore.CYAN + "\n📦 Ver Productos")
+    conexion = conectar_base_datos()
+    if conexion is None:
+        return
 
-    # Recibe todos los productos de la tabla 'productos'
+    cursor = conexion.cursor()
     cursor.execute("SELECT * FROM productos")
     productos = cursor.fetchall()
 
-    # Verifica si hay productos en la base de datos
     if productos:
-        print("Lista de productos en inventario:")
+        print(Fore.GREEN + "Lista de productos en inventario:")
         for producto in productos:
-            print(f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+            print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
     else:
-        print("No hay productos en el inventario.")
+        print(Fore.RED + "⚠️ No hay productos en el inventario.")
 
-    # Cierra la conexión a la base de datos
     conexion.close()
 
-
+# Función para actualizar un producto existente
 def actualizar_producto():
-    # Conecta a la base de datos
-    conexion = sqlite3.connect("inventario.db")
+    """
+    Permite al usuario actualizar los datos de un producto específico.
+    Solicita el ID del producto y ofrece opciones para modificar cada campo.
+    """
+    print(Fore.CYAN + "\n✏️ Actualizar Producto")
+    conexion = conectar_base_datos()
+    if conexion is None:
+        return
+
     cursor = conexion.cursor()
 
     while True:
@@ -124,13 +150,13 @@ def actualizar_producto():
         id_producto = input("Ingrese el ID del producto que desea actualizar (o 'salir' para cancelar): ")
 
         if id_producto.lower() == "salir":
-            print("Operación cancelada.")
+            print(Fore.YELLOW + "Operación cancelada.")
             conexion.close()
             return
 
         # Verifica si el ID ingresado es un número válido
         if not id_producto.isdigit():
-            print("Por favor, ingrese un ID numérico válido.")
+            print(Fore.RED + "⚠️ Por favor, ingrese un ID numérico válido.")
             continue
 
         id_producto = int(id_producto)
@@ -140,23 +166,19 @@ def actualizar_producto():
         producto = cursor.fetchone()
 
         if producto is None:
-            print("El producto con el ID proporcionado no existe. Inténtelo de nuevo.")
+            print(Fore.RED + "⚠️ El producto con el ID proporcionado no existe. Inténtelo de nuevo.")
         else:
             break
 
     # Muestra los datos actuales y solicita nuevos valores
-    print(f"Nombre actual: {producto[1]}")
-    nuevo_nombre = input("Ingrese el nuevo nombre del producto (deje en blanco para mantener): ")
-    if not nuevo_nombre:
-        nuevo_nombre = producto[1]
+    print(Fore.YELLOW + f"Nombre actual: {producto[1]}")
+    nuevo_nombre = input("Ingrese el nuevo nombre del producto (deje en blanco para mantener): ") or producto[1]
 
-    print(f"Descripción actual: {producto[2]}")
-    nueva_descripcion = input("Ingrese la nueva descripción del producto (deje en blanco para mantener): ")
-    if not nueva_descripcion:
-        nueva_descripcion = producto[2]
+    print(Fore.YELLOW + f"Descripción actual: {producto[2]}")
+    nueva_descripcion = input("Ingrese la nueva descripción del producto (deje en blanco para mantener): ") or producto[2]
 
     while True:
-        print(f"Cantidad actual: {producto[3]}")
+        print(Fore.YELLOW + f"Cantidad actual: {producto[3]}")
         nueva_cantidad = input("Ingrese la nueva cantidad del producto (deje en blanco para mantener): ")
         if not nueva_cantidad:
             nueva_cantidad = producto[3]
@@ -165,10 +187,10 @@ def actualizar_producto():
             nueva_cantidad = int(nueva_cantidad)
             break
         else:
-            print("Por favor, ingrese una cantidad válida.")
+            print(Fore.RED + "⚠️ Por favor, ingrese una cantidad válida.")
 
     while True:
-        print(f"Precio actual: {producto[4]}")
+        print(Fore.YELLOW + f"Precio actual: {producto[4]}")
         nuevo_precio = input("Ingrese el nuevo precio del producto (deje en blanco para mantener): ")
         if not nuevo_precio:
             nuevo_precio = producto[4]
@@ -178,14 +200,12 @@ def actualizar_producto():
             if nuevo_precio >= 0:
                 break
             else:
-                print("El precio no puede ser negativo.")
+                print(Fore.RED + "⚠️ El precio no puede ser negativo.")
         except ValueError:
-            print("Por favor, ingrese un precio válido.")
+            print(Fore.RED + "⚠️ Por favor, ingrese un precio válido.")
 
-    print(f"Categoría actual: {producto[5]}")
-    nueva_categoria = input("Ingrese la nueva categoría del producto (deje en blanco para mantener): ")
-    if not nueva_categoria:
-        nueva_categoria = producto[5]
+    print(Fore.YELLOW + f"Categoría actual: {producto[5]}")
+    nueva_categoria = input("Ingrese la nueva categoría del producto (deje en blanco para mantener): ") or producto[5]
 
     # Actualiza los datos del producto en la base de datos
     cursor.execute('''
@@ -198,11 +218,19 @@ def actualizar_producto():
     conexion.commit()
     conexion.close()
 
-    print("¡Producto actualizado exitosamente!")
+    print(Fore.GREEN + "✅ ¡Producto actualizado exitosamente!")
 
+# Función para eliminar un producto
 def eliminar_producto():
-    # Conecta a la base de datos
-    conexion = sqlite3.connect("inventario.db")
+    """
+    Permite eliminar un producto por su ID.
+    Solicita confirmación antes de realizar la eliminación.
+    """
+    print(Fore.CYAN + "\n❌ Eliminar Producto")
+    conexion = conectar_base_datos()
+    if conexion is None:
+        return
+
     cursor = conexion.cursor()
 
     while True:
@@ -210,13 +238,13 @@ def eliminar_producto():
         id_producto = input("Ingrese el ID del producto que desea eliminar (o 'salir' para cancelar): ")
 
         if id_producto.lower() == "salir":
-            print("Operación cancelada.")
+            print(Fore.YELLOW + "Operación cancelada.")
             conexion.close()
             return
 
         # Verifica si el ID ingresado es un número válido
         if not id_producto.isdigit():
-            print("Por favor, ingrese un ID numérico válido.")
+            print(Fore.RED + "⚠️ Por favor, ingrese un ID numérico válido.")
             continue
 
         id_producto = int(id_producto)
@@ -226,25 +254,36 @@ def eliminar_producto():
         producto = cursor.fetchone()
 
         if producto is None:
-            print("El producto con el ID proporcionado no existe. Inténtelo de nuevo.")
+            print(Fore.RED + "⚠️ El producto con el ID proporcionado no existe. Inténtelo de nuevo.")
         else:
-            # Elimina el producto de la tabla 'productos'
-            cursor.execute("DELETE FROM productos WHERE id = ?", (id_producto,))
-            print("¡Producto eliminado exitosamente!")
-            break
+            # Solicita confirmación antes de eliminar
+            confirmacion = input(Fore.RED + f"⚠️ ¿Está seguro de que desea eliminar el producto '{producto[1]}'? (y/n): ")
+            if confirmacion.lower() == 'y':
+                cursor.execute("DELETE FROM productos WHERE id = ?", (id_producto,))
+                print(Fore.GREEN + "✅ ¡Producto eliminado exitosamente!")
+                break
+            else:
+                print(Fore.YELLOW + "Operación cancelada.")
+                break
 
     # Guarda los cambios y cierra la conexión
     conexion.commit()
     conexion.close()
 
+# Función para buscar productos por criterios
 def buscar_producto():
-    # Conexión a la base de datos
-    conexion = sqlite3.connect("inventario.db")
+    """
+    Permite buscar productos en la base de datos según varios criterios.
+    """
+    print(Fore.CYAN + "\n🔍 Buscar Producto")
+    conexion = conectar_base_datos()
+    if conexion is None:
+        return
+
     cursor = conexion.cursor()
 
     # Menú para seleccionar el criterio de búsqueda
-    print("\n🔍 BUSCAR PRODUCTO POR PARÁMETROS")
-    print("Opciones de búsqueda:")
+    print(Fore.YELLOW + "Opciones de búsqueda:")
     print("1. ID")
     print("2. Nombre")
     print("3. Descripción")
@@ -256,12 +295,10 @@ def buscar_producto():
     opcion = input("Seleccione una opción (1-7): ")
 
     if opcion == "7":
-        # Cerrar la conexión y regresar al menú
-        print("Volviendo al menú principal...")
+        print(Fore.YELLOW + "Volviendo al menú principal...")
         conexion.close()
         return
 
-    # Definir los campos disponibles para buscar
     campos = {
         "1": "id",
         "2": "nombre",
@@ -271,42 +308,44 @@ def buscar_producto():
         "6": "categoria"
     }
 
-    # Obtener el campo según la opción seleccionada
     campo = campos.get(opcion)
 
     if not campo:
-        print("⚠️ Opción no válida. Intente de nuevo.")
+        print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
     else:
-        # Solicitar el valor para buscar
         valor = input(f"Ingrese el valor para buscar en '{campo}': ")
 
-        # Construir la consulta SQL según el tipo de campo
         if campo in ["nombre", "descripcion", "categoria"]:
-            # Para texto, buscar coincidencias parciales usando LIKE
             cursor.execute(f"SELECT * FROM productos WHERE {campo} LIKE ?", (f"%{valor}%",))
         else:
-            # Para números, buscar coincidencias exactas
             cursor.execute(f"SELECT * FROM productos WHERE {campo} = ?", (valor,))
 
-        # Obtener y mostrar los resultados
         productos = cursor.fetchall()
 
         if productos:
-            print("\nProductos encontrados:")
+            print(Fore.GREEN + "\nProductos encontrados:")
             for producto in productos:
-                print(f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+                print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
         else:
-            print("⚠️ No se encontraron productos que coincidan con el criterio de búsqueda.")
+            print(Fore.RED + "⚠️ No se encontraron productos que coincidan con el criterio de búsqueda.")
 
-    # Cerrar la conexión a la base de datos
     conexion.close()
 
+# Función para generar reportes del inventario
 def generar_reportes():
-    # Conexión a la base de datos
-    conexion = sqlite3.connect("inventario.db")
+    """
+    Permite generar reportes según criterios específicos:
+    - Productos con bajo stock.
+    - Productos agrupados por categoría.
+    """
+    print(Fore.CYAN + "\n📊 Generar Reportes")
+    conexion = conectar_base_datos()
+    if conexion is None:
+        return
+
     cursor = conexion.cursor()
 
-    print("\n📊 GENERAR REPORTES")
+    print(Fore.YELLOW + "Opciones de reporte:")
     print("1. Productos con bajo stock")
     print("2. Productos por categoría")
     print("3. Volver al menú principal")
@@ -321,13 +360,13 @@ def generar_reportes():
             productos = cursor.fetchall()
 
             if productos:
-                print("\nProductos con bajo stock:")
+                print(Fore.GREEN + "\nProductos con bajo stock:")
                 for producto in productos:
-                    print(f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+                    print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
             else:
-                print("⚠️ No hay productos con stock bajo según el límite proporcionado.")
+                print(Fore.RED + "⚠️ No hay productos con stock bajo según el límite proporcionado.")
         except ValueError:
-            print("⚠️ Por favor, ingrese un número válido para el límite de stock.")
+            print(Fore.RED + "⚠️ Por favor, ingrese un número válido para el límite de stock.")
 
     elif opcion == "2":
         # Reporte de productos por categoría
@@ -336,47 +375,59 @@ def generar_reportes():
         productos = cursor.fetchall()
 
         if productos:
-            print(f"\nProductos en la categoría '{categoria}':")
+            print(Fore.GREEN + f"\nProductos en la categoría '{categoria}':")
             for producto in productos:
-                print(f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+                print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
         else:
-            print(f"⚠️ No se encontraron productos en la categoría '{categoria}'.")
+            print(Fore.RED + f"⚠️ No se encontraron productos en la categoría '{categoria}'.")
 
     elif opcion == "3":
-        print("Volviendo al menú principal...")
+        print(Fore.YELLOW + "Volviendo al menú principal...")
     else:
-        print("⚠️ Opción no válida. Intente de nuevo.")
+        print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
 
-    # Cierra la conexión a la base de datos
     conexion.close()
 
+# Función para resetear la base de datos
 def resetear_base_datos():
-    # Primer advertencia al usuario
-    confirmacion = input("⚠️ ATENCIÓN: Esta acción eliminará TODOS los productos de la base de datos de forma permanente. ¿Desea continuar? (y/n): ")
-    if confirmacion.lower() != "y":
-        print("Operación cancelada.")
+    """
+    Elimina todos los productos en la base de datos y reinicia el contador de IDs.
+    Solicita confirmaciones múltiples para evitar errores accidentales.
+    """
+    print(Fore.RED + "\n⚠️ ATENCIÓN: Esta acción eliminará TODOS los productos de la base de datos de forma permanente.")
+    confirmacion = input("¿Está seguro de que desea continuar? Escriba 'y' para confirmar, 'n' para cancelar: ")
+
+    if confirmacion.lower() != 'y':
+        print(Fore.YELLOW + "Operación cancelada.")
         return
 
-    # Segunda advertencia para confirmar
-    confirmacion_final = input("⚠️ CONFIRMACIÓN FINAL: Está a punto de eliminar todos los datos de la base. Escriba 'y' para confirmar: ")
-    if confirmacion_final != "y":
-        print("Operación cancelada.")
+    confirmacion_final = input(Fore.RED + "CONFIRMACIÓN FINAL: Escriba 'eliminar todo' para proceder: ")
+
+    if confirmacion_final.lower() != "eliminar todo":
+        print(Fore.YELLOW + "Operación cancelada.")
         return
 
-    # Conecta a la base de datos y elimina todos los productos, reseteando el ID
-    conexion = sqlite3.connect("inventario.db")
+    conexion = conectar_base_datos()
+    if conexion is None:
+        return
+
     cursor = conexion.cursor()
 
-    # Elimina todos los registros de la tabla 'productos' y reinicia el ID auto-incremental
-    cursor.execute("DELETE FROM productos")  # Elimina todas las filas en la tabla 'productos'
-    cursor.execute("DELETE FROM sqlite_sequence WHERE name='productos'")  # Reinicia el contador de ID
+    # Elimina todos los registros de la tabla y reinicia el ID auto-incremental
+    cursor.execute("DELETE FROM productos")
+    cursor.execute("DELETE FROM sqlite_sequence WHERE name='productos'")
 
-    # Guarda los cambios y cierra la conexión a la base de datos
     conexion.commit()
     conexion.close()
-    print("✅ Todos los productos han sido eliminados y el ID fue reseteado.")
 
+    print(Fore.GREEN + "✅ Todos los productos han sido eliminados y el ID fue reseteado.")
+
+# Menú principal del sistema
 def menu_principal():
+    """
+    Muestra el menú principal del sistema e interactúa con el usuario para
+    seleccionar diferentes opciones, como agregar, ver, actualizar, eliminar productos y generar reportes.
+    """
     while True:
         # Encabezado del menú
         print(Fore.CYAN + "\n📋 MENÚ PRINCIPAL")
@@ -386,7 +437,7 @@ def menu_principal():
         print(Fore.GREEN + "4. Eliminar producto")
         print(Fore.GREEN + "5. Buscar producto")
         print(Fore.GREEN + "6. Generar reportes")
-        print(Fore.GREEN + "7. Resetear base de datos")
+        print(Fore.RED + "7. Resetear base de datos")
         print(Fore.RED + "8. Salir")
 
         # Solicitar opción del usuario
@@ -413,7 +464,19 @@ def menu_principal():
         else:
             print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
 
-if __name__ == "__main__":
-    conectar_base_datos()
+# Función principal para ejecutar el programa
+def main():
+    """
+    Función principal que inicializa la base de datos y muestra el menú principal.
+    """
     inicializar_base_datos()
     menu_principal()
+
+# Ejecutar el programa
+if __name__ == "__main__":
+    """
+    Este bloque garantiza que el programa se ejecuta solo si es el archivo principal.
+    """
+    main()
+
+# Fin del programa
