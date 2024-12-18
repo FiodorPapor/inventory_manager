@@ -1,5 +1,6 @@
 import sqlite3
 from colorama import Fore, Style, init
+from tabulate import tabulate
 
 # Inicializar colorama para salida de colores
 init(autoreset=True)
@@ -46,8 +47,24 @@ def agregar_producto():
     Permite al usuario elegir entre continuar con ID automático o usar el último ID eliminado.
     """
     print(Fore.CYAN + "\n📝 Agregar Producto")
+    
+    # Solicita el nombre del producto
     nombre = input("Ingrese el nombre del producto: ")
+
+    # Validar que el nombre no sea vacío ni contenga solo espacios
+    while not nombre.strip():
+        print(Fore.RED + "⚠️ El nombre no puede estar vacío.")
+        nombre = input("Ingrese el nombre del producto: ")
+
     descripcion = input("Ingrese la descripción del producto: ")
+
+    # Solicita la categoría del producto
+    categoria = input("Ingrese la categoría del producto: ")
+
+    # Validar que la categoría no sea vacía ni contenga solo espacios
+    while not categoria.strip():
+        print(Fore.RED + "⚠️ La categoría no puede estar vacía.")
+        categoria = input("Ingrese la categoría del producto: ")
 
     # Validación de cantidad
     while True:
@@ -70,8 +87,6 @@ def agregar_producto():
         except ValueError:
             print(Fore.RED + "⚠️ Por favor, ingrese un precio válido.")
 
-    categoria = input("Ingrese la categoría del producto: ")
-
     # Conexión a la base de datos
     conexion = conectar_base_datos()
     if conexion is None:
@@ -79,31 +94,46 @@ def agregar_producto():
 
     cursor = conexion.cursor()
 
-    # Pregunta si desea usar el último ID eliminado
+    # Elección del método de asignación del ID
+    # La lógica de elección de ID permite reutilizar valores liberados, minimizando 
+    # las brechas en la secuencia de IDs. Esto es útil si el ID tiene relevancia 
+    # fuera de la base de datos, como en reportes o referencias externas.
+
     opcion = input("¿Desea continuar con el siguiente ID en la lista (ingrese '1') o usar el último ID eliminado (ingrese '2')? ")
 
     if opcion == '2':
-        # Encuentra el ID reutilizable
-        cursor.execute("SELECT MIN(id + 1) FROM productos WHERE (id + 1) NOT IN (SELECT id FROM productos)")
+        # Recuperar el primer ID disponible que no está en uso
+        cursor.execute("""
+            SELECT MIN(posible_id)
+            FROM (
+                SELECT id + 1 AS posible_id
+                FROM productos
+                EXCEPT
+                SELECT id FROM productos
+            )
+            WHERE posible_id IS NOT NULL
+        """)
         resultado = cursor.fetchone()
-        if resultado[0] is not None:
-            siguiente_id = resultado[0]
-        else:
-            # Si no hay IDs disponibles, usa el próximo ID
-            max_id = cursor.execute("SELECT MAX(id) FROM productos").fetchone()[0]
-            siguiente_id = max_id + 1 if max_id is not None else 1
-    else:
-        # Continua con el próximo ID automático
-        max_id = cursor.execute("SELECT MAX(id) FROM productos").fetchone()[0]
-        siguiente_id = max_id + 1 if max_id is not None else 1
+        siguiente_id = resultado[0] if resultado and resultado[0] else None
 
-    # Inserta el producto
+        # Si no hay IDs libres, usar el próximo ID secuencial
+        if siguiente_id is None:
+            cursor.execute("SELECT MAX(id) FROM productos")
+            max_id = cursor.fetchone()[0]
+            siguiente_id = max_id + 1 if max_id else 1
+    else:
+        # Usar el próximo ID automático
+        cursor.execute("SELECT MAX(id) FROM productos")
+        max_id = cursor.fetchone()[0]
+        siguiente_id = max_id + 1 if max_id else 1
+
+    # Insertar el producto con el ID seleccionado
     cursor.execute('''
         INSERT INTO productos (id, nombre, descripcion, cantidad, precio, categoria)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (siguiente_id, nombre, descripcion, cantidad, precio, categoria))
 
-    # Guarda cambios y cierra la conexión
+    # Confirmar y cerrar conexión
     conexion.commit()
     conexion.close()
 
@@ -125,8 +155,8 @@ def ver_productos():
 
     if productos:
         print(Fore.GREEN + "Lista de productos en inventario:")
-        for producto in productos:
-            print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+        headers = ["ID", "Nombre", "Descripción", "Cantidad", "Precio", "Categoría"]
+        print(tabulate(productos, headers=headers, tablefmt="fancy_grid"))
     else:
         print(Fore.RED + "⚠️ No hay productos en el inventario.")
 
@@ -299,6 +329,7 @@ def buscar_producto():
         conexion.close()
         return
 
+    # Mapa de opciones a campos de la base de datos
     campos = {
         "1": "id",
         "2": "nombre",
@@ -308,27 +339,38 @@ def buscar_producto():
         "6": "categoria"
     }
 
+    # Obtener el campo seleccionado
     campo = campos.get(opcion)
 
+    # Verifica si el campo seleccionado es válido
     if not campo:
         print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
     else:
+        # Solicita el valor para buscar
         valor = input(f"Ingrese el valor para buscar en '{campo}': ")
 
+        # Validar que el valor ingresado no sea vacío
+        while not valor.strip():
+            print(Fore.RED + "⚠️ El valor no puede estar vacío.")
+            valor = input(f"Ingrese el valor para buscar en '{campo}': ")
+
+        # Determina el tipo de búsqueda según el campo
         if campo in ["nombre", "descripcion", "categoria"]:
             cursor.execute(f"SELECT * FROM productos WHERE {campo} LIKE ?", (f"%{valor}%",))
         else:
             cursor.execute(f"SELECT * FROM productos WHERE {campo} = ?", (valor,))
 
+        # Obtener los resultados de la búsqueda
         productos = cursor.fetchall()
 
         if productos:
             print(Fore.GREEN + "\nProductos encontrados:")
-            for producto in productos:
-                print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+            headers = ["ID", "Nombre", "Descripción", "Cantidad", "Precio", "Categoría"]
+            print(tabulate(productos, headers=headers, tablefmt="fancy_grid"))
         else:
             print(Fore.RED + "⚠️ No se encontraron productos que coincidan con el criterio de búsqueda.")
 
+    # Cerrar la conexión a la base de datos
     conexion.close()
 
 # Función para generar reportes del inventario
@@ -352,41 +394,44 @@ def generar_reportes():
 
     opcion = input("Seleccione una opción (1-3): ")
 
-    if opcion == "1":
-        # Reporte de productos con bajo stock
-        try:
-            limite = int(input("Ingrese el límite de stock para el reporte: "))
-            cursor.execute("SELECT * FROM productos WHERE cantidad <= ?", (limite,))
+    try:
+        if opcion == "1":
+            # Reporte de productos con bajo stock
+            try:
+                limite = int(input("Ingrese el límite de stock para el reporte: "))
+                cursor.execute("SELECT * FROM productos WHERE cantidad <= ?", (limite,))
+                productos = cursor.fetchall()
+
+                if productos:
+                    print(Fore.GREEN + "\nProductos con bajo stock:")
+                    headers = ["ID", "Nombre", "Descripción", "Cantidad", "Precio", "Categoría"]
+                    print(tabulate(productos, headers=headers, tablefmt="fancy_grid"))
+                else:
+                    print(Fore.RED + "⚠️ No hay productos con stock bajo según el límite proporcionado.")
+            except ValueError:
+                print(Fore.RED + "⚠️ Por favor, ingrese un número válido para el límite de stock.")
+
+        elif opcion == "2":
+            # Reporte de productos por categoría
+            categoria = input("Ingrese la categoría para generar el reporte: ")
+            cursor.execute("SELECT * FROM productos WHERE categoria LIKE ?", (f"%{categoria}%",))
             productos = cursor.fetchall()
 
             if productos:
-                print(Fore.GREEN + "\nProductos con bajo stock:")
-                for producto in productos:
-                    print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+                print(Fore.GREEN + f"\nProductos en la categoría '{categoria}':")
+                headers = ["ID", "Nombre", "Descripción", "Cantidad", "Precio", "Categoría"]
+                print(tabulate(productos, headers=headers, tablefmt="fancy_grid"))
             else:
-                print(Fore.RED + "⚠️ No hay productos con stock bajo según el límite proporcionado.")
-        except ValueError:
-            print(Fore.RED + "⚠️ Por favor, ingrese un número válido para el límite de stock.")
+                print(Fore.RED + f"⚠️ No se encontraron productos en la categoría '{categoria}'.")
 
-    elif opcion == "2":
-        # Reporte de productos por categoría
-        categoria = input("Ingrese la categoría para generar el reporte: ")
-        cursor.execute("SELECT * FROM productos WHERE categoria LIKE ?", (f"%{categoria}%",))
-        productos = cursor.fetchall()
-
-        if productos:
-            print(Fore.GREEN + f"\nProductos en la categoría '{categoria}':")
-            for producto in productos:
-                print(Fore.YELLOW + f"ID: {producto[0]}, Nombre: {producto[1]}, Descripción: {producto[2]}, Cantidad: {producto[3]}, Precio: {producto[4]}, Categoría: {producto[5]}")
+        elif opcion == "3":
+            print(Fore.YELLOW + "Volviendo al menú principal...")
         else:
-            print(Fore.RED + f"⚠️ No se encontraron productos en la categoría '{categoria}'.")
+            print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
 
-    elif opcion == "3":
-        print(Fore.YELLOW + "Volviendo al menú principal...")
-    else:
-        print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
-
-    conexion.close()
+    finally:
+        # Cerrar la conexión a la base de datos
+        conexion.close()
 
 # Función para resetear la base de datos
 def resetear_base_datos():
@@ -422,43 +467,79 @@ def resetear_base_datos():
 
     print(Fore.GREEN + "✅ Todos los productos han sido eliminados y el ID fue reseteado.")
 
-# Menú principal del sistema
-def menu_principal():
+def menu_productos():
     """
-    Muestra el menú principal del sistema e interactúa con el usuario para
-    seleccionar diferentes opciones, como agregar, ver, actualizar, eliminar productos y generar reportes.
+    Submenú para la gestión de productos en el inventario.
+    Permite agregar, ver, actualizar y eliminar productos.
     """
     while True:
-        # Encabezado del menú
-        print(Fore.CYAN + "\n📋 MENÚ PRINCIPAL")
+        print(Fore.CYAN + "\n📋 MENÚ GESTIÓN DE PRODUCTOS")
         print(Fore.GREEN + "1. Agregar producto")
         print(Fore.GREEN + "2. Ver productos")
         print(Fore.GREEN + "3. Actualizar producto")
         print(Fore.GREEN + "4. Eliminar producto")
-        print(Fore.GREEN + "5. Buscar producto")
-        print(Fore.GREEN + "6. Generar reportes")
-        print(Fore.RED + "7. Resetear base de datos")
-        print(Fore.RED + "8. Salir")
+        print(Fore.YELLOW + "5. Volver al menú principal")
 
-        # Solicitar opción del usuario
-        opcion = input(Fore.YELLOW + "Seleccione una opción (1-8): ")
+        opcion = input(Fore.YELLOW + "Seleccione una opción (1-5): ")
 
-        # Procesar opción seleccionada
         if opcion == "1":
-            agregar_producto()
+            agregar_producto()  # Llama a la función para agregar un producto
         elif opcion == "2":
-            ver_productos()
+            ver_productos()  # Llama a la función para visualizar productos
         elif opcion == "3":
-            actualizar_producto()
+            actualizar_producto()  # Llama a la función para actualizar un producto
         elif opcion == "4":
-            eliminar_producto()
+            eliminar_producto()  # Llama a la función para eliminar un producto
         elif opcion == "5":
-            buscar_producto()
-        elif opcion == "6":
-            generar_reportes()
-        elif opcion == "7":
-            resetear_base_datos()
-        elif opcion == "8":
+            break  # Vuelve al menú principal
+        else:
+            print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
+
+def menu_reportes():
+    """
+    Submenú para reportes y búsqueda.
+    Incluye opciones para buscar productos, generar reportes y resetear la base de datos.
+    """
+    while True:
+        print(Fore.CYAN + "\n📋 MENÚ REPORTES Y BÚSQUEDA")
+        print(Fore.GREEN + "1. Buscar producto")
+        print(Fore.GREEN + "2. Generar reportes")
+        print(Fore.RED + "3. Resetear base de datos")
+        print(Fore.YELLOW + "4. Volver al menú principal")
+
+        opcion = input(Fore.YELLOW + "Seleccione una opción (1-4): ")
+
+        if opcion == "1":
+            buscar_producto()  # Llama a la función para buscar productos en la base
+        elif opcion == "2":
+            generar_reportes()  # Llama a la función para generar reportes
+        elif opcion == "3":
+            resetear_base_datos()  # Llama a la función para resetear la base de datos
+        elif opcion == "4":
+            break  # Vuelve al menú principal
+        else:
+            print(Fore.RED + "⚠️ Opción no válida. Intente de nuevo.")
+
+# Menú principal del sistema
+def menu_principal():
+    """
+    Muestra el menú principal del sistema.
+    Divide las operaciones en dos grupos: gestión de productos y reportes.
+    """
+    while True:
+        print(Fore.CYAN + "\n📋 MENÚ PRINCIPAL")
+        print(Fore.GREEN + "1. Gestión de productos")
+        print(Fore.GREEN + "2. Reportes y búsqueda")
+        print(Fore.RED + "3. Salir")
+
+        # Solicita al usuario que elija una opción
+        opcion = input(Fore.YELLOW + "Seleccione una opción (1-3): ")
+
+        if opcion == "1":
+            menu_productos()  # Accede al submenú para gestionar productos
+        elif opcion == "2":
+            menu_reportes()  # Accede al submenú para reportes y búsqueda
+        elif opcion == "3":
             print(Fore.BLUE + "¡Gracias por usar el sistema de inventario!")
             break
         else:
