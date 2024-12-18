@@ -2,47 +2,55 @@
 
 ## 📋 Description
 
-The Inventory Management System is a simple application written in Python. It was developed as part of the Talento Tech course to practice programming concepts. The system allows managing products in a SQLite database.
+The Inventory Management System is a Python-based application developed during the Talento Tech course. It allows users to manage an inventory of products stored in a SQLite database. The system features a user-friendly terminal interface with colored output and formatted tables.
 
 ---
 
 ## 🛠️ Features
 
-- Add products to the inventory.
-- View the full list of products.
-- Update product information.
-- Delete products from the inventory.
-- Search for products using different parameters.
-- Generate reports (low stock, by category).
-- Reset the database.
+- **Product Management**:
+  - Add products to the inventory.
+  - View all products in a formatted table.
+  - Update product details.
+  - Delete products with confirmation prompts.
+- **Search and Reporting**:
+  - Search products by ID, name, category, and other parameters.
+  - Generate reports for low stock or by category.
+- **Database Management**:
+  - Reset the database to start fresh.
+- **Enhanced UI**:
+  - Colored terminal output using `colorama`.
+  - Table formatting with `tabulate`.
 
 ---
 
 ## 🛑 Prerequisites
 
-- Python 3.8 or higher.
-- Required packages (see below).
+- **Python**: Version 3.8 or higher.
+- **Dependencies**: Listed in `requirements.txt`.
 
 ---
 
 ## 🚀 How to Run
 
-1. Clone this repository:
+1. **Clone the repository**:
    ```bash
    git clone https://github.com/FiodorPapor/inventory_manager.git
    cd inventory_manager
-2. Set up a virtual environment (optional but recommended):
+2. **Set up a virtual environment (optional but recommended)**:
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-3. Install dependencies:
+3. **Install dependencies**:
    pip install -r requirements.txt
-4. Run the application:
+4. **Run the application**:
    python inventory_manager.py
 
 ## 📦 Dependencies
 
-colorama: For colored terminal output.
-Install all dependencies using:
+- **colorama**: For colored terminal output.
+- **tabulate**: For formatted table output.
+
+**Install all dependencies using**:
    pip install -r requirements.txt
 
 ## 📂 Project Structure
@@ -58,8 +66,11 @@ inventory_manager/
 
 ## 📖 License
 
-MIT License.
+This project is licensed under the MIT License.
 
 ## 👤 Author
 
-Paporotskiy Fedor: Python student at Talento Tech.
+Paporotskiy Fedor
+Python student at Talento Tech.
+
+
